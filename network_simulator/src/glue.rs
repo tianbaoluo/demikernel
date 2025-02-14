@@ -277,7 +277,7 @@ pub fn parse_ret_code(s: &str) -> Result<i32, ()> {
             "EDOM" => Ok(libc::EDOM),
             "ERANGE" => Ok(libc::ERANGE),
             "EDEADLK" => Ok(libc::EDEADLK),
-            "EDEADLOCK" => Ok(libc::EDEADLOCK),
+            // "EDEADLOCK" => Ok(libc::EDEADLOCK),
             "ENAMETOOLONG" => Ok(libc::ENAMETOOLONG),
             "ENOLCK" => Ok(libc::ENOLCK),
             "ENOSYS" => Ok(libc::ENOSYS),
