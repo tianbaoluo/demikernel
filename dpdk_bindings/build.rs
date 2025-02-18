@@ -329,6 +329,11 @@ fn os_build() -> Result<()> {
     Ok(())
 }
 
+#[cfg(target_os = "macos")]
+fn os_build() -> Result<()> {
+  Ok(())
+}
+
 fn main() {
     match os_build() {
         Ok(()) => {},

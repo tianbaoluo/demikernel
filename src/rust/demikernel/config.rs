@@ -184,7 +184,7 @@ impl Config {
         // This indicates how often to send keep alive messages. By default, this is 1 second on Windows.
         let keepaliveinterval: u32 = Self::get_int_option(section, "interval")?;
 
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         return Ok(onoff);
 
         #[cfg(target_os = "windows")]

@@ -6,7 +6,7 @@
 //======================================================================================================================
 
 use crate::{
-    catnap::transport::{active_socket::ActiveSocketData, passive_socket::PassiveSocketData},
+    catnap::transport_poll::{active_socket::ActiveSocketData, passive_socket::PassiveSocketData},
     expect_some,
     runtime::{fail::Fail, memory::DemiBuffer, SharedObject},
 };

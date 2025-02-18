@@ -36,8 +36,10 @@ x86 = "0.52.0"
 yaml-rust = "0.4.5"
 
 # Demikernel crates (published on crates.io).
-demikernel-dpdk-bindings = { version = "1.1.8", optional = true }
-demikernel-network-simulator = { version = "0.1.0" }
+demikernel-dpdk-bindings = { version = "1.1.8", path = "dpdk_bindings", optional = true }
+demikernel-network-simulator = { version = "0.1.0", path = "network_simulator", optional = true }
+
+polling = "3.7.4"
 
 # Windows-specific dependencies.
 [target.'cfg(windows)'.dependencies]
@@ -56,6 +58,9 @@ windows = { version = "0.57.0", features = [
 demikernel-xdp-bindings = { version = "1.0.1", optional = true }
 # for interacting with socket2.
 windows-sys = { version = "0.52.0", features = ["Win32_Networking_WinSock"] }
+
+[dev-dependencies]
+hashbrown = "0.15"
 
 # Targets
 [lib]
@@ -83,6 +88,10 @@ path = "tests/rust/udp.rs"
 [[test]]
 name = "sga"
 path = "tests/rust/sga.rs"
+
+[[example]]
+name = "tinyhttp"
+path = "examples/rust/tinyhttp.rs"
 
 [[example]]
 name = "udp-dump"

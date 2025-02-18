@@ -5,10 +5,10 @@
 #![recursion_limit = "512"]
 #![feature(test)]
 #![feature(allocator_api)]
-#![feature(strict_provenance)]
-#![cfg_attr(target_os = "windows", feature(maybe_uninit_uninit_array))]
-#![feature(noop_waker)]
-#![feature(hash_extract_if)]
+// #![feature(strict_provenance)]
+// #![cfg_attr(target_os = "windows", feature(maybe_uninit_uninit_array))]
+// #![feature(noop_waker)]
+// #![feature(hash_extract_if)]
 
 mod collections;
 pub mod inetstack;

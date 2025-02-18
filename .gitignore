@@ -21,6 +21,7 @@ bin/
 # vscode and visual studio
 .vscode/
 .vs/
+.idea/
 
 # gdb
 .gdb.*

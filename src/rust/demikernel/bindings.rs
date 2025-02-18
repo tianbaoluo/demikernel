@@ -534,7 +534,7 @@ pub extern "C" fn demi_sgaalloc(size: libc::size_t) -> demi_sgarray_t {
             sga_buf: ptr::null_mut() as *mut _,
             sga_numsegs: 0,
             sga_segs: [demi_sgaseg_t {
-                sgaseg_buf: ptr::null_mut() as *mut c_void,
+                sgaseg_buf: ptr::null_mut(),
                 sgaseg_len: 0,
             }; 1],
             sga_addr: unsafe { mem::zeroed() },
@@ -707,7 +707,7 @@ pub extern "C" fn demi_getsockopt(
                             // Note that the linger values are different types on different platforms.
                             #[cfg(target_os = "windows")]
                             l_linger: linger.as_secs() as u16,
-                            #[cfg(target_os = "linux")]
+                            #[cfg(any(target_os = "linux", target_os = "macos"))]
                             l_linger: linger.as_secs() as i32,
                         },
                         None => Linger {
