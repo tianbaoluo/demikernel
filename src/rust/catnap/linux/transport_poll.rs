@@ -17,7 +17,7 @@ mod socket;
 //======================================================================================================================
 
 use crate::{
-  catnap::transport_poll::socket::{SharedSocketData, SocketData},
+  catnap::transport::socket::{SharedSocketData, SocketData},
   demikernel::config::Config,
   expect_ok, expect_some,
   runtime::{

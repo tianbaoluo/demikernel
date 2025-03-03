@@ -38,7 +38,7 @@ use ::std::{
 };
 
 #[cfg(feature = "catnap-libos")]
-use crate::catnap::transport_poll::SharedCatnapTransport;
+use crate::catnap::transport::SharedCatnapTransport;
 
 //======================================================================================================================
 // Structures
