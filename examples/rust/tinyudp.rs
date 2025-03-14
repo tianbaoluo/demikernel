@@ -146,7 +146,7 @@ fn main() -> Result<()> {
     let local_addr: SocketAddr = "192.168.104.77:17070".parse().unwrap();
     
     // linux dpdk
-    // std::env::set_var("DPDK_PROT", "TCP");
+    // std::env::set_var("DPDK_PROT", "UDP");
     // std::env::set_var("RUN_CPU", "6");
     // std::env::set_var("CONFIG_PATH", "/root/work/demikernel/hft_config.yaml");
     // let libos: LibOS = match LibOS::new(LibOSName::Catnip, None) {
