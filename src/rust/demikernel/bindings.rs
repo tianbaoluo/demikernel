@@ -37,7 +37,7 @@ thread_local! {
 #[allow(unused)]
 #[no_mangle]
 pub extern "C" fn demi_init(args: *const demi_args_t) -> c_int {
-    logging::initialize();
+    // logging::initialize();
     trace!("demi_init()");
 
     let libos_name: LibOSName = match LibOSName::from_env() {

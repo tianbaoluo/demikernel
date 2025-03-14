@@ -57,7 +57,7 @@ pub enum LibOS {
 
 impl LibOS {
     pub fn new(libos_name: LibOSName, _perf_callback: Option<demi_callback_t>) -> Result<Self, Fail> {
-        logging::initialize();
+        // logging::initialize();
 
         let config_path: String = match env::var("CONFIG_PATH") {
             Ok(config_path) => config_path,

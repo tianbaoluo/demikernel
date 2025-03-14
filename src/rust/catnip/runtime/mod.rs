@@ -91,6 +91,7 @@ impl SharedDPDKRuntime {
                     eal_init_args.push(CString::from_str(run_cpu.as_str()).unwrap());
                 }
                 eal_init_args.push(CString::from_str("--proc-type=primary").unwrap());
+                info!("eal-init-args: {:?}", eal_init_args);
                 let (mm, port_id): (MemoryManager, u16) = Self::initialize_dpdk(
                     &eal_init_args,
                     config.enable_jumbo_frames()?,
@@ -118,6 +119,7 @@ impl SharedDPDKRuntime {
                     eal_init_args.push(CString::from_str(run_cpu.as_str()).unwrap());
                 }
                 eal_init_args.push(CString::from_str("--proc-type=secondary").unwrap());
+                info!("eal-init-args: {:?}", eal_init_args);
                 let (mm, port_id) : (MemoryManager, u16) = Self::initialize_second_dpdk(&eal_init_args, config.enable_jumbo_frames()?)?;
 
 

@@ -201,10 +201,10 @@ impl TcpEchoServer {
       println!("INFO: client closed connection (qd={:?})", qd);
       self.handle_close(qd)?;
     } else {
-      let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
-      let len: usize = sga.sga_segs[0].sgaseg_len as usize;
-      let slice: &[u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
-      println!("bytes #{}\t{:?}", len, String::from_utf8_lossy(slice));
+      // let ptr: *mut u8 = sga.sga_segs[0].sgaseg_buf as *mut u8;
+      // let len: usize = sga.sga_segs[0].sgaseg_len as usize;
+      // let slice: &[u8] = unsafe { slice::from_raw_parts_mut(ptr, len) };
+      // println!("bytes #{}\t{:?}", len, String::from_utf8_lossy(slice));
       // self.issue_push2(qd)?;
       self.issue_resp(qd)?;
       // Pop more data.
@@ -299,6 +299,7 @@ fn is_closed(ret: i64) -> bool {
 }
 
 fn main() -> anyhow::Result<()> {
+  demikernel::runtime::logging::initialize();
   // std::env::set_var("RUST_LOG", "trace");
   std::env::set_var("CONFIG_PATH", "/Users/mr00027ml/work/sandbox/demikernel/config.yaml");
   let libos: LibOS = match LibOS::new(LibOSName::Catnap, None) {
