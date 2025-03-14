@@ -19,13 +19,13 @@ use crate::{
             rte_delay_us_block, rte_eal_init, rte_errno, rte_eth_conf, rte_eth_dev_configure, rte_eth_dev_count_avail,
             rte_eth_dev_get_mtu, rte_eth_dev_info, rte_eth_dev_info_get, rte_eth_dev_is_valid_port,
             rte_eth_dev_set_mtu, rte_eth_dev_start, rte_eth_find_next_owned_by, rte_eth_link, rte_eth_link_get_nowait,
-            rte_eth_promiscuous_enable, rte_eth_rss_ip, rte_eth_rx_burst,
-            rte_eth_rx_mq_mode_RTE_ETH_MQ_RX_RSS as RTE_ETH_MQ_RX_RSS, rte_eth_rx_offload_tcp_cksum,
+            rte_eth_promiscuous_enable, rte_eth_rx_burst, rte_eth_rx_offload_tcp_cksum,
             rte_eth_rx_offload_udp_cksum, rte_eth_rx_queue_setup, rte_eth_rxconf, rte_eth_tx_burst,
             rte_eth_tx_mq_mode_RTE_ETH_MQ_TX_NONE as RTE_ETH_MQ_TX_NONE, rte_eth_tx_offload_multi_segs,
             rte_eth_tx_offload_tcp_cksum, rte_eth_tx_offload_udp_cksum, rte_eth_tx_queue_setup, rte_eth_txconf,
             rte_mbuf, RTE_ETHER_MAX_JUMBO_FRAME_LEN, RTE_ETHER_MAX_LEN, RTE_ETH_DEV_NO_OWNER, RTE_ETH_LINK_FULL_DUPLEX,
-            RTE_ETH_LINK_UP, RTE_PKTMBUF_HEADROOM,
+            RTE_ETH_LINK_UP, RTE_PKTMBUF_HEADROOM, rte_socket_id, rte_ring, rte_ring_create, rte_ring_lookup, RING_F_SC_DEQ, RING_F_SP_ENQ,
+            parse_ipv4_ptype, RTE_PTYPE_L4_TCP, rte_ring_sc_dequeue_burst, rte_ring_sp_enqueue_burst
         },
         memory::DemiBuffer,
         SharedObject,
@@ -40,14 +40,22 @@ use ::std::{
     ops::{Deref, DerefMut},
     time::Duration,
 };
-
+use std::str::FromStr;
 //======================================================================================================================
 // Structures
 //======================================================================================================================
 
+enum RunMode {
+    ForwardTcp,
+    RecvTcp,
+}
+
 pub struct DPDKRuntime {
+    run_mode: RunMode,
     mm: MemoryManager,
+    tcp_ring: *mut rte_ring,
     port_id: u16,
+    queue_id: u16,
 }
 
 #[derive(Clone)]
@@ -59,31 +67,137 @@ pub struct SharedDPDKRuntime(SharedObject<DPDKRuntime>);
 
 impl SharedDPDKRuntime {
     pub fn new(config: &Config) -> Result<Self, Fail> {
-        let tcp_offload: Option<bool> = match config.tcp_checksum_offload() {
-            Ok(offload) => Some(offload),
-            Err(_) => {
-                warn!("No setting for TCP checksum offload. Turning off by default.");
-                None
+        match std::env::var("DPDK_PROT") {
+            Ok(dpdk_prot) if dpdk_prot.eq_ignore_ascii_case("UDP") => {
+                let tcp_offload: Option<bool> = match config.tcp_checksum_offload() {
+                    Ok(offload) => Some(offload),
+                    Err(_) => {
+                        warn!("No setting for TCP checksum offload. Turning off by default.");
+                        None
+                    },
+                };
+
+                let udp_offload: Option<bool> = match config.udp_checksum_offload() {
+                    Ok(offload) => Some(offload),
+                    Err(_) => {
+                        warn!("No setting for UDP checksum offload. Turning off by default.");
+                        None
+                    },
+                };
+
+                let mut eal_init_args = config.eal_init_args()?;
+                if let Ok(run_cpu) = std::env::var("RUN_CPU") {
+                    eal_init_args.push(CString::from_str("-l").unwrap());
+                    eal_init_args.push(CString::from_str(run_cpu.as_str()).unwrap());
+                }
+                eal_init_args.push(CString::from_str("--proc-type=primary").unwrap());
+                let (mm, port_id): (MemoryManager, u16) = Self::initialize_dpdk(
+                    &eal_init_args,
+                    config.enable_jumbo_frames()?,
+                    config.mtu()?,
+                    tcp_offload.unwrap_or(false),
+                    udp_offload.unwrap_or(false),
+                )?;
+
+                let tcp_ring: *mut rte_ring = {
+                    let tcp_ring_name = CString::new("tcp-ring").unwrap();
+                    unsafe {
+                        let ring_id = rte_socket_id();
+                        info!("Initialize dpdk rte_ring id={}", ring_id);
+                        rte_ring_create(tcp_ring_name.as_ptr(), 1024, ring_id as _, RING_F_SP_ENQ | RING_F_SC_DEQ)
+                    }
+                };
+
+                let queue_id = 0;
+                Ok(Self(SharedObject::<DPDKRuntime>::new(DPDKRuntime { run_mode: RunMode::ForwardTcp, mm, tcp_ring, port_id, queue_id })))
+            },
+            Ok(dpdk_prot) if dpdk_prot.eq_ignore_ascii_case("TCP") => {
+                let mut eal_init_args = config.eal_init_args()?;
+                if let Ok(run_cpu) = std::env::var("RUN_CPU") {
+                    eal_init_args.push(CString::from_str("-l").unwrap());
+                    eal_init_args.push(CString::from_str(run_cpu.as_str()).unwrap());
+                }
+                eal_init_args.push(CString::from_str("--proc-type=secondary").unwrap());
+                let (mm, port_id) : (MemoryManager, u16) = Self::initialize_second_dpdk(&eal_init_args, config.enable_jumbo_frames()?)?;
+
+
+                let tcp_ring: *mut rte_ring = {
+                    let tcp_ring_name = CString::new("tcp-ring").unwrap();
+                    unsafe { rte_ring_lookup(tcp_ring_name.as_ptr()) }
+                };
+
+                let queue_id = 1;
+                Ok(Self(SharedObject::<DPDKRuntime>::new(DPDKRuntime { run_mode: RunMode::RecvTcp, mm, tcp_ring, port_id, queue_id })))
+            },
+            Ok(dpdk_prot) => panic!("Unsupported DPDK_PROT {}", dpdk_prot),
+            _ => panic!("Env DPDK_PROT not set"),
+        }
+
+    }
+
+    fn initialize_second_dpdk(eal_init_args: &[CString], use_jumbo_frames: bool) -> Result<(MemoryManager, u16), Fail> {
+        let eal_init_refs = eal_init_args.iter().map(|s| s.as_ptr() as *mut u8).collect::<Vec<_>>();
+        let ret: libc::c_int = unsafe { rte_eal_init(eal_init_refs.len() as i32, eal_init_refs.as_ptr() as *mut _) };
+        if ret < 0 {
+            let rte_errno: libc::c_int = unsafe { rte_errno() };
+            let cause: String = format!("EAL initialization failed (rte_errno={:?})", rte_errno);
+            error!("initialize_dpdk(): {}", cause);
+            return Err(Fail::new(libc::EIO, &cause));
+        }
+
+        let max_body_size: usize = if use_jumbo_frames {
+            (RTE_ETHER_MAX_JUMBO_FRAME_LEN + RTE_PKTMBUF_HEADROOM) as usize
+        } else {
+            DEFAULT_MAX_BODY_SIZE
+        };
+
+        let memory_manager = match MemoryManager::lookup(max_body_size) {
+            Ok(manager) => manager,
+            Err(e) => {
+                let cause: String = format!("Failed to set up memory manager: {:?}", e);
+                error!("initialize_dpdk(): {}", cause);
+                return Err(Fail::new(libc::EIO, &cause));
             },
         };
 
-        let udp_offload: Option<bool> = match config.udp_checksum_offload() {
-            Ok(offload) => Some(offload),
-            Err(_) => {
-                warn!("No setting for UDP checksum offload. Turning off by default.");
-                None
-            },
-        };
+        let port_id = 0;
+        if unsafe { rte_eth_dev_is_valid_port(port_id) } == 0 {
+            let cause: String = format!("Invalid port id");
+            error!("initialize_dpdk_port(): {}", cause);
+            return Err(Fail::new(libc::EIO, &cause));
+        }
 
-        let (mm, port_id): (MemoryManager, u16) = Self::initialize_dpdk(
-            &config.eal_init_args()?,
-            config.enable_jumbo_frames()?,
-            config.mtu()?,
-            tcp_offload.unwrap_or(false),
-            udp_offload.unwrap_or(false),
-        )?;
+        let sleep_duration: Duration = Duration::from_millis(100);
+        let mut retry_count: i32 = 90;
 
-        Ok(Self(SharedObject::<DPDKRuntime>::new(DPDKRuntime { mm, port_id })))
+        loop {
+            unsafe {
+                let mut link: MaybeUninit<rte_eth_link> = MaybeUninit::zeroed();
+                rte_eth_link_get_nowait(port_id, link.as_mut_ptr());
+                let link: rte_eth_link = link.assume_init();
+                if link.link_status() as u32 == RTE_ETH_LINK_UP {
+                    let duplex: &str = if link.link_duplex() as u32 == RTE_ETH_LINK_FULL_DUPLEX {
+                        "full"
+                    } else {
+                        "half"
+                    };
+                    eprintln!(
+                        "Port {} Link Up - speed {} Mbps - {} duplex",
+                        port_id, link.link_speed, duplex
+                    );
+                    break;
+                }
+                rte_delay_us_block(sleep_duration.as_micros() as u32);
+            }
+            if retry_count == 0 {
+                let cause: String = format!("Link never came up");
+                error!("initialize_dpdk_port(): {}", cause);
+                return Err(Fail::new(libc::EIO, &cause));
+            }
+            retry_count -= 1;
+        }
+
+        Ok((memory_manager, 0))
     }
 
     fn initialize_dpdk(
@@ -153,9 +267,9 @@ impl SharedDPDKRuntime {
         udp_checksum_offload: bool,
     ) -> Result<(), Fail> {
         let rx_rings: u16 = 1;
-        let tx_rings: u16 = 1;
-        let rx_ring_size: u16 = 2048;
-        let tx_ring_size: u16 = 2048;
+        let tx_rings: u16 = 2;
+        let rx_ring_size: u16 = 1024;
+        let tx_ring_size: u16 = 1024;
         let nb_rxd: u16 = rx_ring_size;
         let nb_txd: u16 = tx_ring_size;
 
@@ -173,7 +287,7 @@ impl SharedDPDKRuntime {
             dev_info.assume_init()
         };
 
-        println!("dev_info: {:?}", dev_info);
+        info!("dev_info: {:?}", dev_info);
         let mut port_conf: rte_eth_conf = unsafe { MaybeUninit::zeroed().assume_init() };
         port_conf.rxmode.max_lro_pkt_size = if use_jumbo_frames {
             RTE_ETHER_MAX_JUMBO_FRAME_LEN
@@ -186,8 +300,8 @@ impl SharedDPDKRuntime {
         if udp_checksum_offload {
             port_conf.rxmode.offloads |= unsafe { rte_eth_rx_offload_udp_cksum() as u64 };
         }
-        port_conf.rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
-        port_conf.rx_adv_conf.rss_conf.rss_hf = unsafe { rte_eth_rss_ip() as u64 } | dev_info.flow_type_rss_offloads;
+        // port_conf.rxmode.mq_mode = RTE_ETH_MQ_RX_RSS;
+        // port_conf.rx_adv_conf.rss_conf.rss_hf = unsafe { rte_eth_rss_ip() as u64 } | dev_info.flow_type_rss_offloads;
 
         port_conf.txmode.mq_mode = RTE_ETH_MQ_TX_NONE;
         if tcp_checksum_offload {
@@ -340,7 +454,7 @@ impl PhysicalLayer for SharedDPDKRuntime {
         };
 
         let mut mbuf_ptr: *mut rte_mbuf = expect_some!(outgoing_pkt.into_mbuf(), "mbuf cannot be empty");
-        let num_sent: u16 = unsafe { rte_eth_tx_burst(self.port_id, 0, &mut mbuf_ptr, 1) };
+        let num_sent: u16 = unsafe { rte_eth_tx_burst(self.port_id, self.queue_id, &mut mbuf_ptr, 1) };
         debug_assert_eq!(num_sent, 1);
         Ok(())
     }
@@ -348,19 +462,64 @@ impl PhysicalLayer for SharedDPDKRuntime {
     fn receive(&mut self) -> Result<ArrayVec<DemiBuffer, RECEIVE_BATCH_SIZE>, Fail> {
         timer!("catnip::runtime::receive");
 
-        let mut out = ArrayVec::new();
-        let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
-        let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, 0, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
-        assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
+        match self.run_mode {
+            RunMode::ForwardTcp => {
+                let mut out = ArrayVec::new();
+                let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
+                let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, self.queue_id, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
+                assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
 
-        {
-            for &packet in &packets[..nb_rx as usize] {
-                // Safety: `packet` is a valid pointer to a properly initialized `rte_mbuf` struct.
-                let buf: DemiBuffer = unsafe { DemiBuffer::from_mbuf(packet) };
-                out.push(buf);
-            }
+                unsafe {
+                    let mut tcp_packets: ArrayVec<*mut rte_mbuf, RECEIVE_BATCH_SIZE> = ArrayVec::new();
+                    for &packet in &packets[..nb_rx as usize] {
+                        match parse_ipv4_ptype(packet) {
+                            RTE_PTYPE_L4_TCP => tcp_packets.push(packet),
+                            _ => out.push(DemiBuffer::from_mbuf(packet)),
+                        }
+                    }
+                    if tcp_packets.len() > 0 {
+                        let nb_fwd = rte_ring_sp_enqueue_burst(self.tcp_ring, tcp_packets.as_mut_ptr(), tcp_packets.len() as _) as usize;
+                        if nb_fwd < tcp_packets.len() {
+                            warn!("#tcp = {} #fwd={}", tcp_packets.len(), nb_fwd);
+                            for tcp_packet in tcp_packets.drain(nb_fwd..) {
+                                out.push(DemiBuffer::from_mbuf(tcp_packet));
+                            }
+                        }
+                    }
+                }
+
+                Ok(out)
+            },
+            RunMode::RecvTcp => {
+                let mut out = ArrayVec::new();
+                let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
+                let nb_rx: u16 = unsafe { rte_ring_sc_dequeue_burst(self.tcp_ring, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as _) };
+                assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
+
+                unsafe {
+                    for &packet in &packets[..nb_rx as usize] {
+                        out.push(DemiBuffer::from_mbuf(packet));
+                    }
+                }
+                Ok(out)
+            },
         }
 
-        Ok(out)
+        // let mut out = ArrayVec::new();
+        // let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
+        // let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, self.queue_id, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
+        // assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
+        //
+        // {
+        //     for &packet in &packets[..nb_rx as usize] {
+        //         let packet_type = unsafe { parse_ipv4_ptype(packet) };
+        //         println!("packet_type: {} tcp: {} udp: {} icmp: {}", packet_type, RTE_PTYPE_L4_TCP, RTE_PTYPE_L4_UDP, RTE_PTYPE_L4_ICMP);
+        //         // Safety: `packet` is a valid pointer to a properly initialized `rte_mbuf` struct.
+        //         let buf: DemiBuffer = unsafe { DemiBuffer::from_mbuf(packet) };
+        //         out.push(buf);
+        //     }
+        // }
+        //
+        // Ok(out)
     }
 }

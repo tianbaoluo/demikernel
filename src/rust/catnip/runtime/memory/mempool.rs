@@ -8,7 +8,7 @@
 use crate::runtime::{
     fail::Fail,
     libdpdk::{
-        rte_errno, rte_mbuf, rte_mempool, rte_pktmbuf_alloc, rte_pktmbuf_free, rte_pktmbuf_pool_create, rte_socket_id,
+        rte_errno, rte_mbuf, rte_mempool, rte_mempool_lookup, rte_pktmbuf_alloc, rte_pktmbuf_free, rte_pktmbuf_pool_create, rte_socket_id,
     },
 };
 use ::std::ffi::CString;
@@ -41,6 +41,22 @@ impl MemoryPool {
                 data_room_size as u16,
                 rte_socket_id() as i32,
             )
+        };
+
+        // Failed to create memory pool.
+        if pool.is_null() {
+            let rte_errno: libc::c_int = unsafe { rte_errno() };
+            let cause: String = format!("failed to create memory pool: {:?}", rte_errno);
+            error!("new(): {}", cause);
+            return Err(Fail::new(libc::EAGAIN, &cause));
+        }
+
+        Ok(Self { pool })
+    }
+    
+    pub fn lookup(name: CString) -> Result<Self, Fail> {
+        let pool: *mut rte_mempool = unsafe {
+            rte_mempool_lookup(name.as_ptr())
         };
 
         // Failed to create memory pool.

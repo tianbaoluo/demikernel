@@ -306,6 +306,16 @@ fn main() -> anyhow::Result<()> {
     Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
   };
   let addr = "192.168.104.77:3456".parse().unwrap();
+  
+  // linux dpdk
+  // std::env::set_var("DPDK_PROT", "TCP");
+  // std::env::set_var("CONFIG_PATH", "/root/work/demikernel/hft_config.yaml");
+  // let libos: LibOS = match LibOS::new(LibOSName::Catnip, None) {
+  //   Ok(libos) => libos,
+  //   Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
+  // };
+  // let addr = "10.132.6.131:1234".parse().unwrap();
+  
   // let addr = "192.168.0.23:3456".parse().unwrap();
   let mut server: TcpEchoServer = TcpEchoServer::new(libos, addr)?;
   server.run(Some(2))?;

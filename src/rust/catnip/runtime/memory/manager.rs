@@ -60,6 +60,12 @@ impl MemoryManager {
 
         Ok(Self { config, body_pool })
     }
+    
+    pub fn lookup(max_body_size: usize) -> Result<Self, Error> {
+        let config: MemoryConfig = MemoryConfig::new(Some(max_body_size), None, None);
+        let body_pool: MemoryPool = MemoryPool::lookup(CString::new("body_pool")?)?;
+        Ok(Self { config, body_pool })
+    }
 
     pub fn into_sgarray(&self, buf: DemiBuffer) -> Result<demi_sgarray_t, Fail> {
         // Create a scatter-gather segment to expose the DemiBuffer to the user.

@@ -20,7 +20,7 @@ bindgen = "0.70.1"
 cc = "1.1.21"
 
 [features]
-default = ["mlx5"]
+default = ["mlx4"]
 mlx4 = []
 mlx5 = []
 

@@ -113,3 +113,31 @@ void rte_pktmbuf_detach_(struct rte_mbuf *m)
 {
     rte_pktmbuf_detach(m);
 }
+
+uint16_t rte_ring_sp_enqueue_burst_(struct rte_ring *r, struct rte_mbuf **tx_pkts, uint16_t n)
+{
+	return rte_ring_sp_enqueue_burst_elem(r, tx_pkts, sizeof(void *), n, NULL);
+}
+
+uint16_t rte_ring_sc_dequeue_burst_(struct rte_ring *r, struct rte_mbuf **rx_pkts, uint16_t n)
+{
+	return rte_ring_sc_dequeue_burst_elem(r, rx_pkts, sizeof(void *), n, NULL);
+}
+
+uint32_t parse_ipv4_ptype_(struct rte_mbuf *mbuf)
+{
+    uint32_t l3_ptype = mbuf->packet_type & RTE_PTYPE_L3_MASK;
+    if (likely(l3_ptype > 0)) {
+        if ((l3_ptype == RTE_PTYPE_L3_IPV4) || (l3_ptype == RTE_PTYPE_L3_IPV4_EXT)) {
+            return mbuf->packet_type & RTE_PTYPE_L4_MASK;
+        }
+        return 0;
+    } else {
+        struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+        if (eth_hdr->ether_type == rte_cpu_to_be_16(RTE_ETHER_TYPE_IPV4)) {
+            struct rte_ipv4_hdr *ipv4_hdr = rte_pktmbuf_mtod_offset(mbuf, struct rte_ipv4_hdr *, sizeof(struct rte_ether_hdr));
+            return ipv4_hdr->next_proto_id;
+        }
+        return 0;
+    }
+}

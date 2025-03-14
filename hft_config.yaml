@@ -1,0 +1,27 @@
+demikernel:
+  local_ipv4_addr: 10.132.6.131
+  local_link_addr: "02:91:9b:30:70:41"
+raw_socket:
+dpdk:
+  eal_init: ["","--no-hpet","--no-telemetry","-n","8","-a","00:06.0,enable_llq=1","--file-prefix=hft"]
+tcp_socket_options:
+  keepalive:
+    enabled: false
+    time_millis: 0
+    interval: 0
+  linger:
+    enabled: true
+    time_seconds: 0
+  nodelay: true
+inetstack_config:
+  mtu: 1500
+  mss: 1500
+  enable_jumbo_frames: false
+  udp_checksum_offload: false
+  tcp_checksum_offload: false
+  arp_table:
+    "02:91:9b:30:70:41": "10.132.6.131"
+    "02:3f:47:43:1e:3c": "10.132.6.150"
+  arp_request_retries: 5
+  arp_request_timeout: 20
+  arp_cache_ttl: 15

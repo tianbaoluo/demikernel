@@ -32,6 +32,9 @@ extern "C" {
     fn rte_pktmbuf_prepend_(m: *mut rte_mbuf, len: u16) -> *mut c_char;
     fn rte_mbuf_from_indirect_(m: *mut rte_mbuf) -> *mut rte_mbuf;
     fn rte_pktmbuf_detach_(m: *mut rte_mbuf);
+    fn rte_ring_sp_enqueue_burst_(r: *mut rte_ring, tx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16;
+    fn rte_ring_sc_dequeue_burst_(r: *mut rte_ring, rx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16;
+    fn parse_ipv4_ptype_(m: *mut rte_mbuf) -> u32;
 }
 
 #[cfg(all(feature = "mlx5", target_os = "windows"))]
@@ -167,4 +170,18 @@ pub unsafe fn rte_mbuf_from_indirect(m: *mut rte_mbuf) -> *mut rte_mbuf {
 #[inline]
 pub unsafe fn rte_pktmbuf_detach(m: *mut rte_mbuf) {
     rte_pktmbuf_detach_(m)
+}
+
+#[inline]
+pub unsafe fn rte_ring_sp_enqueue_burst(r: *mut rte_ring, tx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16 {
+    rte_ring_sp_enqueue_burst_(r, tx_pkts, nb_pkts)
+}
+#[inline]
+pub unsafe fn rte_ring_sc_dequeue_burst(r: *mut rte_ring, rx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16 {
+    rte_ring_sc_dequeue_burst_(r, rx_pkts, nb_pkts)
+}
+
+#[inline]
+pub unsafe fn parse_ipv4_ptype(m: *mut rte_mbuf) -> u32 {
+    parse_ipv4_ptype_(m)
 }

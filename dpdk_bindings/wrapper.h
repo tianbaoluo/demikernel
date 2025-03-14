@@ -13,3 +13,7 @@
 #include <rte_memcpy.h>
 #include <rte_udp.h>
 #include <rte_mbuf.h>
+#include <rte_mempool.h>
+#include <rte_ring.h>
+
+uint32_t parse_ipv4_ptype_(struct rte_mbuf *mbuf);

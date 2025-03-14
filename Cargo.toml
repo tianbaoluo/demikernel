@@ -94,6 +94,10 @@ name = "tinyhttp"
 path = "examples/rust/tinyhttp.rs"
 
 [[example]]
+name = "tinyudp"
+path = "examples/rust/tinyudp.rs"
+
+[[example]]
 name = "udp-dump"
 path = "examples/rust/udp-dump.rs"
 
