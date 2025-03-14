@@ -146,6 +146,7 @@ fn main() -> Result<()> {
     
     // linux dpdk
     // std::env::set_var("DPDK_PROT", "TCP");
+    // std::env::set_var("RUN_CPU", "7");
     // std::env::set_var("CONFIG_PATH", "/root/work/demikernel/hft_config.yaml");
     // let libos: LibOS = match LibOS::new(LibOSName::Catnip, None) {
     //     Ok(libos) => libos,
