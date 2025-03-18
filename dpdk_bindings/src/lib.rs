@@ -35,6 +35,7 @@ extern "C" {
     fn rte_ring_sp_enqueue_burst_(r: *mut rte_ring, tx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16;
     fn rte_ring_sc_dequeue_burst_(r: *mut rte_ring, rx_pkts: *mut *mut rte_mbuf, nb_pkts: u16) -> u16;
     fn parse_ipv4_ptype_(m: *mut rte_mbuf) -> u32;
+    fn check_arp_(m: *mut rte_mbuf) -> bool;
 }
 
 #[cfg(all(feature = "mlx5", target_os = "windows"))]
@@ -184,4 +185,9 @@ pub unsafe fn rte_ring_sc_dequeue_burst(r: *mut rte_ring, rx_pkts: *mut *mut rte
 #[inline]
 pub unsafe fn parse_ipv4_ptype(m: *mut rte_mbuf) -> u32 {
     parse_ipv4_ptype_(m)
+}
+
+#[inline]
+pub unsafe fn check_arp(m: *mut rte_mbuf) -> bool {
+    check_arp_(m)
 }

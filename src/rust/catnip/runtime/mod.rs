@@ -25,7 +25,7 @@ use crate::{
             rte_eth_tx_offload_tcp_cksum, rte_eth_tx_offload_udp_cksum, rte_eth_tx_queue_setup, rte_eth_txconf,
             rte_mbuf, RTE_ETHER_MAX_JUMBO_FRAME_LEN, RTE_ETHER_MAX_LEN, RTE_ETH_DEV_NO_OWNER, RTE_ETH_LINK_FULL_DUPLEX,
             RTE_ETH_LINK_UP, RTE_PKTMBUF_HEADROOM, rte_socket_id, rte_ring, rte_ring_create, rte_ring_lookup, RING_F_SC_DEQ, RING_F_SP_ENQ,
-            parse_ipv4_ptype, RTE_PTYPE_L4_TCP, rte_ring_sc_dequeue_burst, rte_ring_sp_enqueue_burst
+            parse_ipv4_ptype, RTE_PTYPE_L4_TCP, RTE_PTYPE_L4_UDP, check_arp, rte_pktmbuf_clone, rte_mempool, rte_ring_sc_dequeue_burst, rte_ring_sp_enqueue_burst
         },
         memory::DemiBuffer,
         SharedObject,
@@ -476,7 +476,20 @@ impl PhysicalLayer for SharedDPDKRuntime {
                     for &packet in &packets[..nb_rx as usize] {
                         match parse_ipv4_ptype(packet) {
                             RTE_PTYPE_L4_TCP => tcp_packets.push(packet),
-                            _ => out.push(DemiBuffer::from_mbuf(packet)),
+                            RTE_PTYPE_L4_UDP => out.push(DemiBuffer::from_mbuf(packet)),
+                            ptype => {
+                                if check_arp(packet) {
+                                    // println!("got arp req: {}", ptype);
+                                    let mempool_ptr: *mut rte_mempool = (*packet).pool;
+                                    let duplicate_packet: *mut rte_mbuf = rte_pktmbuf_clone(packet, mempool_ptr);
+                                    if duplicate_packet.is_null() {
+                                        let rte_errno: libc::c_int = rte_errno();
+                                        panic!("failed to clone mbuf: {:?}", rte_errno);
+                                    }
+                                    tcp_packets.push(duplicate_packet);
+                                }
+                                out.push(DemiBuffer::from_mbuf(packet));
+                            },
                         }
                     }
                     if tcp_packets.len() > 0 {

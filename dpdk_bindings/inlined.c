@@ -141,3 +141,17 @@ uint32_t parse_ipv4_ptype_(struct rte_mbuf *mbuf)
         return 0;
     }
 }
+
+bool check_arp_(struct rte_mbuf *mbuf)
+{
+    uint32_t l2_ptype = mbuf->packet_type & RTE_PTYPE_L2_MASK;
+    if (l2_ptype == RTE_PTYPE_L2_ETHER_ARP) {
+        return true;
+    } else if (l2_ptype == 0) {
+        struct rte_ether_hdr *eth_hdr = rte_pktmbuf_mtod(mbuf, struct rte_ether_hdr *);
+        if (rte_be_to_cpu_16(eth_hdr->ether_type) == RTE_ETHER_TYPE_ARP) {
+            return true;
+        }
+    }
+    return false;
+}
