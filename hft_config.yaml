@@ -23,5 +23,5 @@ inetstack_config:
     "02:91:9b:30:70:41": "10.132.6.131"
     "02:3f:47:43:1e:3c": "10.132.6.150"
   arp_request_retries: 5
-  arp_request_timeout: 20
-  arp_cache_ttl: 15
+  arp_request_timeout: 200
+  arp_cache_ttl: 150
