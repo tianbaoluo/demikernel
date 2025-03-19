@@ -145,7 +145,9 @@ impl SharedLayer3Endpoint {
         remote_ipv4_addr: Ipv4Addr,
         pkt: DemiBuffer,
     ) -> Result<(), Fail> {
+        // println!("query mac for {}", remote_ipv4_addr);
         let remote_link_addr: MacAddress = self.arp.query(remote_ipv4_addr).await?;
+        // println!("query mac for {} => {}", remote_ipv4_addr, remote_link_addr);
 
         self.transmit_packet(remote_ipv4_addr, remote_link_addr, IpProtocol::UDP, pkt)
     }

@@ -98,6 +98,10 @@ name = "tinyudp"
 path = "examples/rust/tinyudp.rs"
 
 [[example]]
+name = "test_pfs"
+path = "examples/rust/test_pfs.rs"
+
+[[example]]
 name = "udp-dump"
 path = "examples/rust/udp-dump.rs"
 

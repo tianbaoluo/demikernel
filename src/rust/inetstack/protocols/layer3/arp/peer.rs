@@ -44,6 +44,10 @@ use ::std::{
 pub struct ArpPeer {
     layer2_endpoint: SharedLayer2Endpoint,
     local_ipv4_addr: Ipv4Addr,
+    default_ipv4_route: Ipv4Addr,
+    subnet_mask: u32,
+    local_ipv4_mask: u32,
+    mask_prefix_len: usize,
     cache: ArpCache,
     waiters: HashMap<Ipv4Addr, LinkedList<Sender<MacAddress>>>,
     arp_config: ArpConfig,
@@ -74,9 +78,21 @@ impl SharedArpPeer {
             arp_config.is_enabled(),
         );
 
+        let default_ipv4_route = std::env::var("DEFAULT_IPV4_ROUTE").expect("DEFAULT_IPV4_ROUTE not set");
+        let mask_prefix_len = match std::env::var("MASK_PREFIX_LEN") {
+            Ok(len_str) => len_str.parse().unwrap(),
+            Err(_) => 24,
+        };
+        let subnet_mask = 0xffffffffu32 << (32 - mask_prefix_len);
+        let local_ipv4_addr = config.local_ipv4_addr()?;
+        let local_ipv4_mask = local_ipv4_addr.to_bits() & subnet_mask;
         let peer: SharedArpPeer = Self(SharedObject::new(ArpPeer {
             layer2_endpoint,
-            local_ipv4_addr: config.local_ipv4_addr()?,
+            local_ipv4_addr,
+            default_ipv4_route: default_ipv4_route.parse().unwrap(),
+            mask_prefix_len,
+            subnet_mask,
+            local_ipv4_mask,
             cache,
             waiters: HashMap::default(),
             arp_config,
@@ -238,9 +254,16 @@ impl SharedArpPeer {
     }
 
     pub async fn query(&mut self, ipv4_addr: Ipv4Addr) -> Result<MacAddress, Fail> {
+        let mut ipv4_addr = ipv4_addr;
+        let mask = ipv4_addr.to_bits() & self.subnet_mask;
+        if mask != self.local_ipv4_mask {
+            // println!("ip mask diff, local={} dest={} query {} for {}", self.local_ipv4_mask, mask, self.default_ipv4_route, ipv4_addr);
+            ipv4_addr = self.default_ipv4_route;
+        }
         if let Some(&link_addr) = self.cache.get(ipv4_addr) {
             return Ok(link_addr);
         }
+
         let header: ArpHeader = ArpHeader::new(
             ArpOperation::Request,
             self.layer2_endpoint.get_local_link_addr(),
@@ -248,6 +271,7 @@ impl SharedArpPeer {
             MacAddress::broadcast(),
             ipv4_addr,
         );
+        // println!("arp request: {:?}", header);
         let mut peer: SharedArpPeer = self.clone();
         // from TCP/IP illustrated, chapter 4:
         // > The frequency of the ARP request is very close to one per
