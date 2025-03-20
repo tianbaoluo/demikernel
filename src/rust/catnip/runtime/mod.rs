@@ -34,7 +34,7 @@ use crate::{
 };
 use ::arrayvec::ArrayVec;
 use ::std::{
-    ffi::CString,
+    ffi::CString, str::FromStr,
     mem,
     mem::MaybeUninit,
     ops::{Deref, DerefMut},
