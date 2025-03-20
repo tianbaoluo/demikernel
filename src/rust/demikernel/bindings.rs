@@ -13,7 +13,6 @@ use crate::{
     },
     runtime::{
         fail::Fail,
-        logging,
         types::{demi_args_t, demi_callback_t, demi_qresult_t, demi_qtoken_t, demi_sgarray_t, demi_sgaseg_t},
         QToken,
     },

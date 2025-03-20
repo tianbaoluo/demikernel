@@ -9,7 +9,7 @@ use crate::inetstack::{
     config::{ArpConfig, TcpConfig, UdpConfig},
     types::MacAddress,
 };
-use ::rand::{thread_rng, Rng};
+use ::rand::{rng, Rng};
 use ::std::net::Ipv4Addr;
 
 //======================================================================================================================
@@ -33,7 +33,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         let mut rng_seed = [0; 32];
-        thread_rng().fill(rng_seed.as_mut());
+        rng().fill(rng_seed.as_mut());
         Options {
             arp: ArpConfig::default(),
             my_ipv4_addr: Ipv4Addr::new(0, 0, 0, 0),

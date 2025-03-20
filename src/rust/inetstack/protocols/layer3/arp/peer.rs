@@ -47,7 +47,6 @@ pub struct ArpPeer {
     default_ipv4_route: Ipv4Addr,
     subnet_mask: u32,
     local_ipv4_mask: u32,
-    mask_prefix_len: usize,
     cache: ArpCache,
     waiters: HashMap<Ipv4Addr, LinkedList<Sender<MacAddress>>>,
     arp_config: ArpConfig,
@@ -78,19 +77,24 @@ impl SharedArpPeer {
             arp_config.is_enabled(),
         );
 
-        let default_ipv4_route = std::env::var("DEFAULT_IPV4_ROUTE").expect("DEFAULT_IPV4_ROUTE not set");
-        let mask_prefix_len = match std::env::var("MASK_PREFIX_LEN") {
-            Ok(len_str) => len_str.parse().unwrap(),
-            Err(_) => 24,
-        };
-        let subnet_mask = 0xffffffffu32 << (32 - mask_prefix_len);
         let local_ipv4_addr = config.local_ipv4_addr()?;
+        let subnet_mask = match std::env::var("SUBNET_MASK") {
+            Ok(subnet_mask) => {
+                let subnet_mask: Ipv4Addr = subnet_mask.parse().unwrap();
+                subnet_mask.to_bits()
+            },
+            Err(_) => 0xffffff00u32,
+        };
+        let default_ipv4_route = match std::env::var("DEFAULT_IPV4_ROUTE") {
+            Ok(dgw) => dgw.parse::<Ipv4Addr>().unwrap(),
+            Err(_) => Ipv4Addr::from_bits((local_ipv4_addr.to_bits() & subnet_mask) | 0x1),
+        };
+        
         let local_ipv4_mask = local_ipv4_addr.to_bits() & subnet_mask;
         let peer: SharedArpPeer = Self(SharedObject::new(ArpPeer {
             layer2_endpoint,
             local_ipv4_addr,
-            default_ipv4_route: default_ipv4_route.parse().unwrap(),
-            mask_prefix_len,
+            default_ipv4_route,
             subnet_mask,
             local_ipv4_mask,
             cache,
@@ -250,6 +254,12 @@ impl SharedArpPeer {
     }
 
     pub fn try_query(&self, ipv4_addr: Ipv4Addr) -> Option<MacAddress> {
+        let mut ipv4_addr = ipv4_addr;
+        let mask = ipv4_addr.to_bits() & self.subnet_mask;
+        if mask != self.local_ipv4_mask {
+            // println!("ip mask diff, local={} dest={} query {} for {}", self.local_ipv4_mask, mask, self.default_ipv4_route, ipv4_addr);
+            ipv4_addr = self.default_ipv4_route;
+        }
         self.cache.get(ipv4_addr).cloned()
     }
 

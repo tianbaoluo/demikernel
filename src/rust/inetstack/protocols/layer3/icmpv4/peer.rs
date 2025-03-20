@@ -178,7 +178,7 @@ impl SharedIcmpv4Peer {
         state += u16::from_be_bytes([pid_buf[0], pid_buf[1]]) as u32;
         state += u16::from_be_bytes([pid_buf[2], pid_buf[3]]) as u32;
 
-        let nonce: [u8; 2] = self.rng.gen();
+        let nonce: [u8; 2] = self.rng.random();
         state += u16::from_be_bytes([nonce[0], nonce[1]]) as u32;
 
         while state > 0xFFFF {

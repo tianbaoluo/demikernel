@@ -301,25 +301,26 @@ impl Receiver {
             Self::process_fin(cb);
         }
 
-        // Send an ack on every FIN. We do this separately here because if the FIN is in order, we ack it after the
-        // previous line, otherwise we do not ack the FIN.
-        if header.fin {
-            trace!("Acking FIN");
-            Sender::send_ack(cb, layer3_endpoint)
-        }
-
+        // // Send an ack on every FIN. We do this separately here because if the FIN is in order, we ack it after the
+        // // previous line, otherwise we do not ack the FIN.
+        // if header.fin {
+        //     trace!("Acking FIN");
+        //     Sender::send_ack(cb, layer3_endpoint)
+        // }
+        //
         // We should ACK this segment, preferably via piggybacking on a response.
-        if cb.receiver.ack_deadline_time_secs.get().is_none() {
-            // Start the delayed ACK timer to ensure an ACK gets sent soon even if no piggyback opportunity occurs.
-            let timeout: Duration = cb.receiver.ack_delay_timeout_secs;
-            // Getting the current time is extremely cheap as it is just a variable lookup.
-            cb.receiver.ack_deadline_time_secs.set(Some(now + timeout));
-        } else {
-            // We already owe our peer an ACK (the timer was already running), so cancel the timer and ACK now.
-            cb.receiver.ack_deadline_time_secs.set(None);
-            trace!("process_packet(): sending ack on deadline expiration");
-            Sender::send_ack(cb, layer3_endpoint);
-        }
+        // if cb.receiver.ack_deadline_time_secs.get().is_none() {
+        //     // Start the delayed ACK timer to ensure an ACK gets sent soon even if no piggyback opportunity occurs.
+        //     let timeout: Duration = cb.receiver.ack_delay_timeout_secs;
+        //     // Getting the current time is extremely cheap as it is just a variable lookup.
+        //     cb.receiver.ack_deadline_time_secs.set(Some(now + timeout));
+        // } else {
+        //     // We already owe our peer an ACK (the timer was already running), so cancel the timer and ACK now.
+        //     cb.receiver.ack_deadline_time_secs.set(None);
+        //     trace!("process_packet(): sending ack on deadline expiration");
+        //     Sender::send_ack(cb, layer3_endpoint);
+        // }
+        Sender::send_ack(cb, layer3_endpoint);
 
         Ok(())
     }

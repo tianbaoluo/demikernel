@@ -23,8 +23,7 @@ use crate::{
         libos::network::{libos::SharedNetworkLibOS, NetworkLibOSWrapper},
     },
     runtime::{
-        fail::Fail,
-        limits, logging,
+        fail::Fail, limits,
         network::socket::option::SocketOption,
         types::{demi_callback_t, demi_qresult_t, demi_sgarray_t},
         QDesc, QToken, SharedDemiRuntime,

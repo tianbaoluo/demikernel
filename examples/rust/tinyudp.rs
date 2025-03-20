@@ -4,7 +4,6 @@ use ::demikernel::{demi_sgarray_t, runtime::types::demi_opcode_t, LibOS, LibOSNa
 use ::std::mem;
 use ::std::{
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-    str::FromStr,
     time::Duration,
 };
 use std::slice;
@@ -137,7 +136,6 @@ impl Drop for Application {
 }
 
 fn main() -> Result<()> {
-    demikernel::runtime::logging::initialize();
     std::env::set_var("CONFIG_PATH", "/Users/mr00027ml/work/sandbox/demikernel/config.yaml");
     let libos: LibOS = match LibOS::new(LibOSName::Catnap, None) {
         Ok(libos) => libos,

@@ -1,0 +1,16 @@
+[package]
+name = "log2"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+log = "0.4"
+
+[features]
+default = ["release-level-info"]
+release-level-debug = ["debug", "info", "warn"]
+release-level-info = ["info", "warn"]
+release-level-warn = ["warn"]
+debug = []
+info = []
+warn = []

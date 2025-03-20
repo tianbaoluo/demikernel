@@ -46,6 +46,7 @@ use std::str::FromStr;
 //======================================================================================================================
 
 enum RunMode {
+    Owned,
     ForwardTcp,
     RecvTcp,
 }
@@ -98,6 +99,7 @@ impl SharedDPDKRuntime {
                     config.mtu()?,
                     tcp_offload.unwrap_or(false),
                     udp_offload.unwrap_or(false),
+                    true,
                 )?;
 
                 let tcp_ring: *mut rte_ring = {
@@ -131,8 +133,45 @@ impl SharedDPDKRuntime {
                 let queue_id = 1;
                 Ok(Self(SharedObject::<DPDKRuntime>::new(DPDKRuntime { run_mode: RunMode::RecvTcp, mm, tcp_ring, port_id, queue_id })))
             },
-            Ok(dpdk_prot) => panic!("Unsupported DPDK_PROT {}", dpdk_prot),
-            _ => panic!("Env DPDK_PROT not set"),
+            // Ok(dpdk_prot) => panic!("Unsupported DPDK_PROT {}", dpdk_prot),
+            _ => {
+                let tcp_offload: Option<bool> = match config.tcp_checksum_offload() {
+                    Ok(offload) => Some(offload),
+                    Err(_) => {
+                        warn!("No setting for TCP checksum offload. Turning off by default.");
+                        None
+                    },
+                };
+
+                let udp_offload: Option<bool> = match config.udp_checksum_offload() {
+                    Ok(offload) => Some(offload),
+                    Err(_) => {
+                        warn!("No setting for UDP checksum offload. Turning off by default.");
+                        None
+                    },
+                };
+
+                let mut eal_init_args = config.eal_init_args()?;
+                if let Ok(run_cpu) = std::env::var("RUN_CPU") {
+                    eal_init_args.push(CString::from_str("-l").unwrap());
+                    eal_init_args.push(CString::from_str(run_cpu.as_str()).unwrap());
+                }
+                eal_init_args.push(CString::from_str("--proc-type=primary").unwrap());
+                info!("eal-init-args: {:?}", eal_init_args);
+                let (mm, port_id): (MemoryManager, u16) = Self::initialize_dpdk(
+                    &eal_init_args,
+                    config.enable_jumbo_frames()?,
+                    config.mtu()?,
+                    tcp_offload.unwrap_or(false),
+                    udp_offload.unwrap_or(false),
+                    false,
+                )?;
+
+                let tcp_ring: *mut rte_ring = std::ptr::null_mut();
+
+                let queue_id = 0;
+                Ok(Self(SharedObject::<DPDKRuntime>::new(DPDKRuntime { run_mode: RunMode::Owned, mm, tcp_ring, port_id, queue_id })))
+            },
         }
 
     }
@@ -208,6 +247,7 @@ impl SharedDPDKRuntime {
         mtu: u16,
         tcp_checksum_offload: bool,
         udp_checksum_offload: bool,
+        forward_tcp: bool,
     ) -> Result<(MemoryManager, u16), Fail> {
         std::env::set_var("MLX5_SHUT_UP_BF", "1");
         std::env::set_var("MLX5_SINGLE_THREADED", "1");
@@ -250,6 +290,7 @@ impl SharedDPDKRuntime {
             mtu,
             tcp_checksum_offload,
             udp_checksum_offload,
+            forward_tcp,
         )?;
 
         // TODO: Where is this function?
@@ -267,9 +308,10 @@ impl SharedDPDKRuntime {
         mtu: u16,
         tcp_checksum_offload: bool,
         udp_checksum_offload: bool,
+        forward_tcp: bool,
     ) -> Result<(), Fail> {
         let rx_rings: u16 = 1;
-        let tx_rings: u16 = 2;
+        let tx_rings: u16 = if forward_tcp { 2 } else { 1 };
         let rx_ring_size: u16 = 1024;
         let tx_ring_size: u16 = 1024;
         let nb_rxd: u16 = rx_ring_size;
@@ -457,6 +499,7 @@ impl PhysicalLayer for SharedDPDKRuntime {
 
         let mut mbuf_ptr: *mut rte_mbuf = expect_some!(outgoing_pkt.into_mbuf(), "mbuf cannot be empty");
         let num_sent: u16 = unsafe { rte_eth_tx_burst(self.port_id, self.queue_id, &mut mbuf_ptr, 1) };
+        // println!("#### queue={} send packet #{}", self.queue_id, num_sent);
         debug_assert_eq!(num_sent, 1);
         Ok(())
     }
@@ -465,6 +508,21 @@ impl PhysicalLayer for SharedDPDKRuntime {
         timer!("catnip::runtime::receive");
 
         match self.run_mode {
+            RunMode::Owned => {
+                let mut out = ArrayVec::new();
+                let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
+                let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, 0, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
+                assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
+                {
+                    for &packet in &packets[..nb_rx as usize] {
+                        // Safety: `packet` is a valid pointer to a properly initialized `rte_mbuf` struct.
+                        let buf: DemiBuffer = unsafe { DemiBuffer::from_mbuf(packet) };
+                        out.push(buf);
+                    }
+                }
+
+                Ok(out)
+            },
             RunMode::ForwardTcp => {
                 let mut out = ArrayVec::new();
                 let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
@@ -477,7 +535,7 @@ impl PhysicalLayer for SharedDPDKRuntime {
                         match parse_ipv4_ptype(packet) {
                             RTE_PTYPE_L4_TCP => tcp_packets.push(packet),
                             RTE_PTYPE_L4_UDP => out.push(DemiBuffer::from_mbuf(packet)),
-                            ptype => {
+                            _ptype => {
                                 if check_arp(packet) {
                                     // println!("got arp req: {}", ptype);
                                     let mempool_ptr: *mut rte_mempool = (*packet).pool;
@@ -494,6 +552,7 @@ impl PhysicalLayer for SharedDPDKRuntime {
                     }
                     if tcp_packets.len() > 0 {
                         let nb_fwd = rte_ring_sp_enqueue_burst(self.tcp_ring, tcp_packets.as_mut_ptr(), tcp_packets.len() as _) as usize;
+                        // println!("##### forward tcp-ring #{} / {}", nb_fwd, tcp_packets.len());
                         if nb_fwd < tcp_packets.len() {
                             warn!("#tcp = {} #fwd={}", tcp_packets.len(), nb_fwd);
                             for tcp_packet in tcp_packets.drain(nb_fwd..) {
@@ -509,8 +568,10 @@ impl PhysicalLayer for SharedDPDKRuntime {
                 let mut out = ArrayVec::new();
                 let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
                 let nb_rx: u16 = unsafe { rte_ring_sc_dequeue_burst(self.tcp_ring, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as _) };
+                // if nb_rx > 0 {
+                //     println!("##### recv from tcp-ring #{}", nb_rx);
+                // }
                 assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
-
                 unsafe {
                     for &packet in &packets[..nb_rx as usize] {
                         out.push(DemiBuffer::from_mbuf(packet));
@@ -519,22 +580,5 @@ impl PhysicalLayer for SharedDPDKRuntime {
                 Ok(out)
             },
         }
-
-        // let mut out = ArrayVec::new();
-        // let mut packets: [*mut rte_mbuf; RECEIVE_BATCH_SIZE] = unsafe { mem::zeroed() };
-        // let nb_rx = unsafe { rte_eth_rx_burst(self.port_id, self.queue_id, packets.as_mut_ptr(), RECEIVE_BATCH_SIZE as u16) };
-        // assert!(nb_rx as usize <= RECEIVE_BATCH_SIZE);
-        //
-        // {
-        //     for &packet in &packets[..nb_rx as usize] {
-        //         let packet_type = unsafe { parse_ipv4_ptype(packet) };
-        //         println!("packet_type: {} tcp: {} udp: {} icmp: {}", packet_type, RTE_PTYPE_L4_TCP, RTE_PTYPE_L4_UDP, RTE_PTYPE_L4_ICMP);
-        //         // Safety: `packet` is a valid pointer to a properly initialized `rte_mbuf` struct.
-        //         let buf: DemiBuffer = unsafe { DemiBuffer::from_mbuf(packet) };
-        //         out.push(buf);
-        //     }
-        // }
-        //
-        // Ok(out)
     }
 }

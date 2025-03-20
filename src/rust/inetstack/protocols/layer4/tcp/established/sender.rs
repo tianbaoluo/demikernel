@@ -637,7 +637,9 @@ impl Sender {
         } else {
             // Duplicate ACK (doesn't acknowledge anything new).  We can mostly ignore this, except for fast-retransmit.
             // TODO: Implement fast-retransmit.  In which case, we'd increment our dup-ack counter here.
-            warn!("process_ack(): received duplicate ack ({:?})", header.ack_num);
+            if !header.psh {
+                warn!("process_ack(): received duplicate ack ({:?})", header.ack_num);    
+            }
         }
     }
 

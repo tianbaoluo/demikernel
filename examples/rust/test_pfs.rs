@@ -94,7 +94,7 @@ impl Application {
           };
         },
         Err(e) => {
-          println!("wait-any error: inlight_send={} errno={}", inlight_send, e.errno);
+          println!("wait-any error: inlight_send={} errno={}/{:?}", inlight_send, e.errno, e);
           if !inlight_send && (e.errno == libc::ETIMEDOUT || e.errno == 110) {
             // send heartbeat
             let qt: QToken = match self.libos.pushto(self.sockqd, &self.heartbeat, self.pfs_endpoint) {

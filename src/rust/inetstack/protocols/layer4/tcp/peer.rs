@@ -62,7 +62,7 @@ impl SharedTcpPeer {
         rng_seed: [u8; 32],
     ) -> Result<Self, Fail> {
         let mut rng: SmallRng = SmallRng::from_seed(rng_seed);
-        let nonce: u32 = rng.gen();
+        let nonce: u32 = rng.random();
         Ok(Self(SharedObject::<TcpPeer>::new(TcpPeer {
             isn_generator: IsnGenerator::new(nonce),
             runtime,
@@ -121,7 +121,7 @@ impl SharedTcpPeer {
     pub fn listen(&mut self, socket: &mut SharedTcpSocket, backlog: usize) -> Result<(), Fail> {
         // Most checks should have been performed already
         debug_assert!(socket.local().is_some());
-        let nonce: u32 = self.rng.gen();
+        let nonce: u32 = self.rng.random();
         socket.listen(backlog, nonce)
     }
 
