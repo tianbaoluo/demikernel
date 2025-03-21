@@ -130,27 +130,29 @@ fn main() -> Result<()> {
     
     // linux dpdk
     // std::env::set_var("DPDK_PROT", "UDP");
-    let use_dpdk = false;
-    if use_dpdk {
-        std::env::set_var("RUN_CPU", "6");
-        std::env::set_var("CONFIG_PATH", "hft_config.yaml");
-        let libos: LibOS = match LibOS::new(LibOSName::Catnip, None) {
-            Ok(libos) => libos,
-            Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
-        };
-        let local_addr: SocketAddr = "10.132.6.131:17070".parse().unwrap();
+    match std::env::var("USE_DPDK")?.as_str() {
+        "1" => {
+            std::env::set_var("RUN_CPU", "6");
+            std::env::set_var("CONFIG_PATH", "hft_config.yaml");
+            let libos: LibOS = match LibOS::new(LibOSName::Catnip, None) {
+                Ok(libos) => libos,
+                Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
+            };
+            let local_addr: SocketAddr = "10.132.6.131:17070".parse().unwrap();
 
-        Application::new(libos, local_addr)?.run()
-    } else {
-        std::env::set_var("RUN_CPU", "7");
-        std::env::set_var("CONFIG_PATH", "config.yaml");
-        let libos: LibOS = match LibOS::new(LibOSName::Catnap, None) {
-            Ok(libos) => libos,
-            Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
-        };
-        let local_addr: SocketAddr = "10.132.6.150:17070".parse().unwrap();
+            Application::new(libos, local_addr)?.run()
+        },
+        _ => {
+            std::env::set_var("RUN_CPU", "7");
+            std::env::set_var("CONFIG_PATH", "config.yaml");
+            let libos: LibOS = match LibOS::new(LibOSName::Catnap, None) {
+                Ok(libos) => libos,
+                Err(e) => anyhow::bail!("failed to initialize libos: {:?}", e.cause),
+            };
+            let local_addr: SocketAddr = "10.132.6.150:17070".parse().unwrap();
 
-        Application::new(libos, local_addr)?.run()
+            Application::new(libos, local_addr)?.run()
+        },
     }
 }
 
