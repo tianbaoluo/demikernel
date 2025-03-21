@@ -1028,8 +1028,8 @@ impl Clone for DemiBuffer {
                 let mbuf_ptr_clone: *mut rte_mbuf = rte_pktmbuf_clone(mbuf_ptr, mempool_ptr);
                 if mbuf_ptr_clone.is_null() {
                     let rte_errno: libc::c_int = rte_errno();
-                    let mp_in_use_count = rte_mempool_in_use_count(rte_mempool);
-                    let mp_avail_count = rte_mempool_avail_count(rte_mempool);
+                    let mp_in_use_count = rte_mempool_in_use_count(mempool_ptr);
+                    let mp_avail_count = rte_mempool_avail_count(mempool_ptr);
                     panic!("failed to clone mbuf: errno={} mempool #in-use={} #avail={} self={:?}", rte_errno, mp_in_use_count, mp_avail_count, self);
                 }
 
