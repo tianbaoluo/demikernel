@@ -31,7 +31,7 @@
 #[cfg(feature = "libdpdk")]
 use crate::runtime::libdpdk::{
     rte_errno, rte_mbuf, rte_mempool, rte_pktmbuf_adj, rte_pktmbuf_clone, rte_pktmbuf_free, rte_pktmbuf_prepend,
-    rte_pktmbuf_trim,
+    rte_pktmbuf_trim, rte_mempool_avail_count, rte_mempool_in_use_count,
 };
 use crate::{
     pal::CPU_DATA_CACHE_LINE_SIZE_IN_BYTES,
@@ -1028,7 +1028,9 @@ impl Clone for DemiBuffer {
                 let mbuf_ptr_clone: *mut rte_mbuf = rte_pktmbuf_clone(mbuf_ptr, mempool_ptr);
                 if mbuf_ptr_clone.is_null() {
                     let rte_errno: libc::c_int = rte_errno();
-                    panic!("failed to clone mbuf: {:?}", rte_errno);
+                    let mp_in_use_count = rte_mempool_in_use_count(rte_mempool);
+                    let mp_avail_count = rte_mempool_avail_count(rte_mempool);
+                    panic!("failed to clone mbuf: errno={} mempool #in-use={} #avail={} self={:?}", rte_errno, mp_in_use_count, mp_avail_count, self);
                 }
 
                 // Safety: from_mbuf is safe to call here as "mbuf_ptr_clone" is known to point to a valid MBuf.
